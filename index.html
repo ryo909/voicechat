@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mascot Talk</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Top Bar -->
@@ -14,17 +16,17 @@
             <div class="controls">
                 <button id="btnVoiceToggle" class="btn-icon" title="音声ON/OFF">🔈 OFF</button>
                 <button id="btnStop" class="btn-icon" title="停止">⏹</button>
-                
+
                 <div class="control-group">
                     <label>Voice</label>
                     <select id="voiceSelect"></select>
                 </div>
-                
+
                 <div class="control-group">
                     <label>Rate</label>
                     <input type="range" id="rateRange" min="0.7" max="1.3" step="0.1" value="1.0">
                 </div>
-                
+
                 <div class="control-group">
                     <label>Pitch</label>
                     <input type="range" id="pitchRange" min="0.7" max="1.3" step="0.1" value="1.0">
@@ -43,7 +45,7 @@
             <section class="mascot-panel">
                 <div class="mascot-header">
                     <div class="mascot-name" id="mascotNameDisplay">Assistant</div>
-                    
+
                     <!-- Affinity Meter -->
                     <div class="affinity-container">
                         <div class="affinity-label">仲良し度</div>
@@ -56,7 +58,7 @@
                 <div class="mascot-frame" id="mascotFrame">
                     <!-- Default image source, will be replaced by JS if DB has one -->
                     <img src="./assets/mascot.png" id="mascotImg" alt="Mascot">
-                    
+
                     <!-- Effects Overlays -->
                     <div class="mouth" id="mouthOverlay"></div>
                     <div id="bubble" class="bubble">...</div>
@@ -71,7 +73,7 @@
                 <!-- Dev Panel (Hidden by default) -->
                 <div id="devPanel" class="dev-panel hidden">
                     <h3>開発者設定</h3>
-                    
+
                     <div class="dev-section">
                         <h4>プロフィール</h4>
                         <div class="input-row">
@@ -106,9 +108,9 @@
 
                     <div class="dev-section">
                         <h4>画像差し替え</h4>
-                        <input type="file" id="imageInput" accept="image/*" class="file-input">
+                        <input type="file" id="imageInput" accept="image/*" class="file-input" style="display:none;">
                         <div class="btn-row">
-                            <button id="btnSelectImage" onclick="document.getElementById('imageInput').click()">🖼 画像選択</button>
+                            <button id="btnSelectImage">🖼 画像選択</button>
                             <button id="btnResetImage">🧹 デフォルト</button>
                         </div>
                         <div id="fileNameDisplay" class="file-name">（未選択）</div>
@@ -123,7 +125,7 @@
                         <div class="msg-bubble">こんにちは！何かお話ししましょう！</div>
                     </div>
                 </div>
-                
+
                 <div class="input-area">
                     <input type="text" id="chatInput" placeholder="メッセージを入力..." autocomplete="off">
                     <button id="btnSend">送信</button>
@@ -131,10 +133,21 @@
             </section>
         </main>
     </div>
-    
-    <!-- Scripts -->
-    <script src="js/dialogue.js"></script>
-    <script src="js/tts.js"></script>
-    <script src="js/app.js"></script>
+
+    <!-- Error Logger (Dev) -->
+    <script>
+        window.addEventListener("error", function (e) {
+            var pre = document.createElement("pre");
+            pre.style.cssText = "position:fixed;left:8px;right:8px;bottom:8px;max-height:40vh;overflow:auto;z-index:999999;background:#300;color:#fff;padding:10px;border-radius:8px;font-size:12px;white-space:pre-wrap;";
+            pre.textContent = "[JS ERROR]\n" + (e.message || "") + "\n" + (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "");
+            document.body.appendChild(pre);
+        });
+    </script>
+
+    <!-- Scripts (defer, correct order) -->
+    <script defer src="./js/tts.js"></script>
+    <script defer src="./js/dialogue.js"></script>
+    <script defer src="./js/app.js"></script>
 </body>
+
 </html>

@@ -39,7 +39,9 @@ body {
     background: rgba(0, 0, 0, 0.3);
     border-bottom: var(--glass-border);
     backdrop-filter: blur(10px);
-    z-index: 10;
+    z-index: 9999;
+    position: sticky;
+    top: 0;
 }
 
 .logo {
@@ -61,7 +63,8 @@ body {
     color: var(--text-sub);
 }
 
-.control-group select, .control-group input {
+.control-group select,
+.control-group input {
     background: #333;
     color: #fff;
     border: none;
@@ -72,7 +75,7 @@ body {
 .separator {
     width: 1px;
     height: 30px;
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 button {
@@ -84,12 +87,19 @@ button {
 }
 
 .btn-icon {
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     color: #ddd;
     padding: 6px 10px;
 }
-.btn-icon:hover { background: rgba(255,255,255,0.2); }
-.btn-icon.active { background: var(--primary); color: #000; }
+
+.btn-icon:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-icon.active {
+    background: var(--primary);
+    color: #000;
+}
 
 .btn-mode {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -127,7 +137,10 @@ button {
     margin-bottom: 1rem;
 }
 
-.mascot-name { font-size: 1.1rem; font-weight: bold; }
+.mascot-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
 
 .affinity-container {
     width: 150px;
@@ -137,7 +150,7 @@ button {
 
 .affinity-bar {
     height: 8px;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     border-radius: 4px;
     overflow: hidden;
     margin-top: 2px;
@@ -152,7 +165,8 @@ button {
 .mascot-frame {
     position: relative;
     width: 300px;
-    height: 350px; /* Base size */
+    height: 350px;
+    /* Base size */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -164,7 +178,7 @@ button {
     max-height: 100%;
     object-fit: contain;
     transition: transform 0.1s;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
 }
 
 /* Speaking Animation: Bob */
@@ -179,14 +193,27 @@ button {
 }
 
 @keyframes bob {
-    0% { transform: translateY(0) rotate(0deg); }
-    100% { transform: translateY(-4px) rotate(0.5deg) scale(1.02); }
+    0% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    100% {
+        transform: translateY(-4px) rotate(0.5deg) scale(1.02);
+    }
 }
 
 @keyframes pop {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.08); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.08);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 /* Mouth Overlay */
@@ -198,7 +225,8 @@ button {
     width: 60px;
     height: 20px;
     transform: translate(-50%, -50%);
-    background: #000; /* Placeholder color if simplistic */
+    background: #000;
+    /* Placeholder color if simplistic */
     /* Usually this would be an image or SVG. For now using a dark ellipse to simulate open mouth */
     background: rgba(60, 20, 20, 0.85);
     border-radius: 50%;
@@ -212,8 +240,13 @@ button {
 }
 
 @keyframes talk {
-    0% { transform: translate(-50%, -50%) scaleY(0.2); }
-    100% { transform: translate(-50%, -50%) scaleY(1.0); }
+    0% {
+        transform: translate(-50%, -50%) scaleY(0.2);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scaleY(1.0);
+    }
 }
 
 /* Bubble */
@@ -221,14 +254,14 @@ button {
     position: absolute;
     top: -60px;
     right: -20px;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255, 255, 255, 0.9);
     color: #333;
     padding: 10px 16px;
     border-radius: 12px;
     min-width: 100px;
     max-width: 220px;
     font-size: 0.9rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
     opacity: 0;
     transform: translateY(10px) scale(0.95);
     transition: opacity 0.3s, transform 0.3s;
@@ -256,7 +289,7 @@ button {
     left: 20px;
     border-width: 8px 8px 0;
     border-style: solid;
-    border-color: rgba(255,255,255,0.9) transparent transparent transparent;
+    border-color: rgba(255, 255, 255, 0.9) transparent transparent transparent;
 }
 
 /* Sparkle */
@@ -271,8 +304,26 @@ button {
 }
 
 @keyframes sparkleAnim {
-    0% { transform: scale(0); opacity: 1; }
-    100% { transform: scale(2); opacity: 0; }
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+/* Prevent overlays from blocking clicks */
+.sparkle-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
 }
 
 .status-display {
@@ -284,28 +335,82 @@ button {
 /* --- Dev Panel --- */
 .dev-panel {
     margin-top: 1rem;
-    background: rgba(0,0,0,0.4);
+    background: rgba(0, 0, 0, 0.4);
     padding: 1rem;
     border-radius: 8px;
     width: 100%;
     max-width: 350px;
 }
-.dev-panel.hidden { display: none; }
-.dev-section { margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; }
-.dev-section h4 { margin-bottom: 0.5rem; color: var(--primary); font-size: 0.9rem; }
-.slider-row, .input-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 0.8rem; gap: 8px; }
-.slider-row input { flex: 1; }
-.input-row input { flex: 1; padding: 4px; border-radius: 4px; border: none; background: #444; color: #fff; }
-.btn-row { display: flex; gap: 8px; margin-top: 8px; }
-.btn-row button { flex: 1; padding: 4px; background: #555; color: #fff; font-size: 0.8rem; }
-.file-name { font-size: 0.75rem; margin-top: 4px; color: #aaa; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dev-panel.hidden {
+    display: none;
+}
+
+.dev-section {
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0.5rem;
+}
+
+.dev-section h4 {
+    margin-bottom: 0.5rem;
+    color: var(--primary);
+    font-size: 0.9rem;
+}
+
+.slider-row,
+.input-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+    gap: 8px;
+}
+
+.slider-row input {
+    flex: 1;
+}
+
+.input-row input {
+    flex: 1;
+    padding: 4px;
+    border-radius: 4px;
+    border: none;
+    background: #444;
+    color: #fff;
+}
+
+.btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.btn-row button {
+    flex: 1;
+    padding: 4px;
+    background: #555;
+    color: #fff;
+    font-size: 0.8rem;
+}
+
+.file-name {
+    font-size: 0.75rem;
+    margin-top: 4px;
+    color: #aaa;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
 /* --- Right: Chat Panel --- */
 .chat-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     border-left: var(--glass-border);
 }
 
@@ -322,8 +427,15 @@ button {
     display: flex;
     max-width: 80%;
 }
-.msg-row.bot { align-self: flex-start; }
-.msg-row.user { align-self: flex-end; justify-content: flex-end; }
+
+.msg-row.bot {
+    align-self: flex-start;
+}
+
+.msg-row.user {
+    align-self: flex-end;
+    justify-content: flex-end;
+}
 
 .msg-bubble {
     padding: 10px 14px;
@@ -334,7 +446,7 @@ button {
 }
 
 .msg-row.bot .msg-bubble {
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     color: #fff;
     border-bottom-left-radius: 2px;
 }
@@ -347,7 +459,7 @@ button {
 
 .input-area {
     padding: 1rem;
-    background: rgba(0,0,0,0.3);
+    background: rgba(0, 0, 0, 0.3);
     display: flex;
     gap: 0.5rem;
 }
@@ -356,12 +468,15 @@ button {
     flex: 1;
     padding: 10px;
     border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
     color: #fff;
     outline: none;
 }
-.input-area input:focus { background: rgba(255,255,255,0.1); }
+
+.input-area input:focus {
+    background: rgba(255, 255, 255, 0.1);
+}
 
 .input-area button {
     background: var(--primary);
@@ -372,8 +487,23 @@ button {
 }
 
 @media (max-width: 768px) {
-    .app-container { flex-direction: column; overflow-y: auto; }
-    .main-content { flex-direction: column; overflow: visible; }
-    .mascot-panel { border-right: none; border-bottom: var(--glass-border); min-height: 400px; }
-    .chat-panel { min-height: 300px; }
+    .app-container {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+
+    .main-content {
+        flex-direction: column;
+        overflow: visible;
+    }
+
+    .mascot-panel {
+        border-right: none;
+        border-bottom: var(--glass-border);
+        min-height: 400px;
+    }
+
+    .chat-panel {
+        min-height: 300px;
+    }
 }
