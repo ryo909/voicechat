@@ -18,12 +18,31 @@ class TTS {
             this.synth.onvoiceschanged = () => this.updateVoices();
         }
         this.updateVoices();
+
+        // Retry logic for Chrome (voices list may be empty initially)
+        this._voiceRetryCount = 0;
+        this._voiceRetryTimer = setInterval(() => {
+            this._voiceRetryCount++;
+            this.updateVoices();
+
+            if (this.voices && this.voices.length > 0) {
+                clearInterval(this._voiceRetryTimer);
+                this._voiceRetryTimer = null;
+            }
+            if (this._voiceRetryCount >= 20) { // 200ms * 20 = ~4 seconds
+                clearInterval(this._voiceRetryTimer);
+                this._voiceRetryTimer = null;
+            }
+        }, 200);
     }
 
     updateVoices() {
-        this.voices = this.synth.getVoices().sort((a, b) => {
-            const aJa = a.lang.startsWith('ja') ? -1 : 1;
-            const bJa = b.lang.startsWith('ja') ? -1 : 1;
+        const list = this.synth.getVoices() || [];
+        if (!list.length) return; // Don't dispatch empty list
+
+        this.voices = list.sort((a, b) => {
+            const aJa = (a.lang || '').startsWith('ja') ? -1 : 1;
+            const bJa = (b.lang || '').startsWith('ja') ? -1 : 1;
             return aJa - bJa;
         });
 

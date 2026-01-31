@@ -23,13 +23,21 @@ var appState = {
     mascotName: 'Mascot',
     userName: '',
     affinity: 0,
-    devVisible: false
+    devVisible: false,
+    bubbleConfig: {
+        anchor: 'top', // 'top' | 'bottom'
+        x: 50,         // %
+        y: 16,         // px
+        w: 520,        // px
+        pad: 16        // px
+    }
 };
 
 // ============================================
 // Mascot Name Storage
 // ============================================
 const LS_NAME_KEY = "mascot_name_v1";
+const LS_BUBBLE_KEY = "mascot_bubble_tuning_v1";
 const DEFAULT_NAME = "まるもち";
 
 function getMascotName() {
@@ -55,6 +63,50 @@ function setBubble(text) {
     const el = document.getElementById("bubbleText") || document.getElementById("bubble");
     if (!el) return;
     el.textContent = text || "";
+}
+
+// ============================================
+// Bubble Style Application
+// ============================================
+function applyBubbleStyle() {
+    var cfg = appState.bubbleConfig;
+    var el = els.bubble;
+    if (!el || !cfg) return;
+
+    el.style.position = 'absolute';
+    el.style.left = cfg.x + '%';
+    el.style.transform = 'translateX(-50%)';
+
+    if (cfg.anchor === 'bottom') {
+        el.style.top = '';
+        el.style.bottom = (cfg.y || 16) + 'px';
+    } else {
+        el.style.bottom = '';
+        el.style.top = (cfg.y || 16) + 'px';
+    }
+
+    var pad = (cfg.pad != null ? cfg.pad : 16);
+    var w = (cfg.w != null ? cfg.w : 520);
+    el.style.width = 'min(' + w + 'px, calc(100% - ' + (pad * 2) + 'px))';
+
+    el.style.zIndex = '50';
+    el.style.pointerEvents = 'none';
+}
+
+function renderBubblePanelValues() {
+    var cfg = appState.bubbleConfig;
+    if (!els.bubbleAnchor) return;
+
+    els.bubbleAnchor.value = cfg.anchor || 'top';
+    els.bubbleX.value = cfg.x != null ? cfg.x : 50;
+    els.bubbleY.value = cfg.y != null ? cfg.y : 16;
+    els.bubbleW.value = cfg.w != null ? cfg.w : 520;
+    els.bubblePad.value = cfg.pad != null ? cfg.pad : 16;
+
+    els.bubbleValX.innerText = els.bubbleX.value;
+    els.bubbleValY.innerText = els.bubbleY.value;
+    els.bubbleValW.innerText = els.bubbleW.value;
+    els.bubbleValPad.innerText = els.bubblePad.value;
 }
 
 // ============================================
@@ -98,7 +150,24 @@ async function initApp() {
         mascotNameInput: $('mascotNameInput'),
         mascotNameSave: $('mascotNameSave'),
         mascotNameLabel: $('mascotNameLabel'),
-        btnSaveName: must('btnSaveName')
+        btnSaveName: must('btnSaveName'),
+
+        // Voice test/reload
+        btnVoiceTest: must('btnVoiceTest'),
+        btnVoicesReload: must('btnVoicesReload'),
+
+        // Bubble adjustment
+        bubbleAnchor: $('bubbleAnchor'),
+        bubbleX: $('bubbleX'),
+        bubbleY: $('bubbleY'),
+        bubbleW: $('bubbleW'),
+        bubblePad: $('bubblePad'),
+        bubbleValX: $('bubbleValX'),
+        bubbleValY: $('bubbleValY'),
+        bubbleValW: $('bubbleValW'),
+        bubbleValPad: $('bubbleValPad'),
+        btnSaveBubble: $('btnSaveBubble'),
+        btnResetBubble: $('btnResetBubble')
     };
 
     // Cleanup old mouth tuning data
@@ -182,8 +251,34 @@ function initUI() {
     });
 
     els.voiceSelect.addEventListener('change', function (e) {
-        tts.setProfile({ voiceURI: e.target.value });
-        localStorage.setItem('mascot_voice_uri', e.target.value);
+        var uri = e.target.value;
+        tts.setProfile({ voiceURI: uri });
+        localStorage.setItem('mascot_voice_uri', uri);
+        // 即座に声が変わったことを確認
+        tts.speak("声、変えてみたよ。", "neutral");
+    });
+
+    // Voice Test Button
+    els.btnVoiceTest.addEventListener('click', function () {
+        if (tts.unlock) tts.unlock();
+        if (els.voiceSelect && els.voiceSelect.value) {
+            tts.setProfile({ voiceURI: els.voiceSelect.value });
+            localStorage.setItem('mascot_voice_uri', els.voiceSelect.value);
+        }
+        tts.speak("この声でいくね。よろしくね。", "neutral");
+        setStatus("テスト発話中...");
+        setTimeout(function () { setStatus("待機中"); }, 1200);
+    });
+
+    // Voices Reload Button
+    els.btnVoicesReload.addEventListener('click', function () {
+        if (tts.unlock) tts.unlock();
+        if (tts.updateVoices) tts.updateVoices();
+        setTimeout(function () {
+            if (tts.updateVoices) tts.updateVoices();
+        }, 300);
+        setStatus("音声リスト更新中...");
+        setTimeout(function () { setStatus("待機中"); }, 800);
     });
 
     must('rateRange').addEventListener('input', function (e) { tts.setProfile({ rate: e.target.value }); });
@@ -226,9 +321,53 @@ function initUI() {
         });
     }
 
+    // Bubble Position Adjustment
+    function updateBubble() {
+        appState.bubbleConfig = {
+            anchor: els.bubbleAnchor ? els.bubbleAnchor.value : 'top',
+            x: parseFloat(els.bubbleX ? els.bubbleX.value : 50),
+            y: parseInt(els.bubbleY ? els.bubbleY.value : 16, 10),
+            w: parseInt(els.bubbleW ? els.bubbleW.value : 520, 10),
+            pad: parseInt(els.bubblePad ? els.bubblePad.value : 16, 10)
+        };
+
+        if (els.bubbleValX) els.bubbleValX.innerText = appState.bubbleConfig.x;
+        if (els.bubbleValY) els.bubbleValY.innerText = appState.bubbleConfig.y;
+        if (els.bubbleValW) els.bubbleValW.innerText = appState.bubbleConfig.w;
+        if (els.bubbleValPad) els.bubbleValPad.innerText = appState.bubbleConfig.pad;
+
+        applyBubbleStyle();
+    }
+
+    [els.bubbleX, els.bubbleY, els.bubbleW, els.bubblePad].forEach(function (r) {
+        if (r) r.addEventListener('input', updateBubble);
+    });
+    if (els.bubbleAnchor) els.bubbleAnchor.addEventListener('change', updateBubble);
+
+    if (els.btnSaveBubble) {
+        els.btnSaveBubble.addEventListener('click', function () {
+            saveSettings();
+            setStatus("吹き出し位置を保存しました");
+            setTimeout(function () { setStatus("待機中"); }, 700);
+        });
+    }
+
+    if (els.btnResetBubble) {
+        els.btnResetBubble.addEventListener('click', function () {
+            appState.bubbleConfig = { anchor: 'top', x: 50, y: 16, w: 520, pad: 16 };
+            renderBubblePanelValues();
+            applyBubbleStyle();
+            saveSettings();
+            setStatus("吹き出し位置をリセットしました");
+            setTimeout(function () { setStatus("待機中"); }, 700);
+        });
+    }
+
     // Initial Renders
     updateAffinityUI();
     updateModeUI();
+    renderBubblePanelValues();
+    applyBubbleStyle();
 }
 
 // ============================================
@@ -397,6 +536,12 @@ function loadSettings() {
     if (savedVoice && tts) {
         tts.setProfile({ voiceURI: savedVoice });
     }
+
+    // Restore bubble config
+    var sBubble = localStorage.getItem(LS_BUBBLE_KEY);
+    if (sBubble) {
+        try { appState.bubbleConfig = JSON.parse(sBubble); } catch (e) { }
+    }
 }
 
 function saveSettings() {
@@ -405,6 +550,7 @@ function saveSettings() {
     localStorage.setItem('mascot_mode_v1', appState.mode);
     localStorage.setItem('mascot_dev_visible_v1', appState.devVisible);
     if (tts) localStorage.setItem('mascot_sfx_enabled_v1', tts.sfxEnabled);
+    localStorage.setItem(LS_BUBBLE_KEY, JSON.stringify(appState.bubbleConfig));
 }
 
 // ============================================

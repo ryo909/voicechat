@@ -554,3 +554,56 @@ button {
     color: rgba(255, 255, 255, .6);
     margin-bottom: 4px;
 }
+
+/* --- Mini Button (Voice Test/Reload) --- */
+button.mini {
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ddd;
+    opacity: 0.95;
+}
+
+button.mini:hover {
+    background: rgba(255, 255, 255, 0.2);
+    opacity: 1;
+}
+
+/* --- Bubble Visibility Enhancement --- */
+#bubble {
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #111;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+}
+
+/* --- Slider Row Styles --- */
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.slider-row label {
+    min-width: 100px;
+    font-size: 12px;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+}
+
+.slider-row select {
+    flex: 1;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    color: #eee;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
