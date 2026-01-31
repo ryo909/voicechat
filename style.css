@@ -580,6 +580,24 @@ button.mini:hover {
     backdrop-filter: blur(6px);
     border: 1px solid rgba(0, 0, 0, 0.08);
     pointer-events: none;
+    max-width: 420px;
+    line-height: 1.45;
+}
+
+#bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 100%;
+    border: 10px solid transparent;
+    border-top-color: rgba(255, 255, 255, 0.92);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.15));
+}
+
+#mascotFrame {
+    padding-top: 60px;
+    box-sizing: border-box;
 }
 
 /* --- Slider Row Styles --- */

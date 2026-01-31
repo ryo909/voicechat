@@ -27,9 +27,9 @@ var appState = {
     bubbleConfig: {
         anchor: 'top', // 'top' | 'bottom'
         x: 50,         // %
-        y: 16,         // px
-        w: 520,        // px
-        pad: 16        // px
+        y: 28,         // px
+        w: 380,        // px
+        pad: 24        // px
     }
 };
 
@@ -38,6 +38,8 @@ var appState = {
 // ============================================
 const LS_NAME_KEY = "mascot_name_v1";
 const LS_BUBBLE_KEY = "mascot_bubble_tuning_v1";
+const LS_BUBBLE_VER = "mascot_bubble_tuning_ver";
+const BUBBLE_VER = "v2";
 const DEFAULT_NAME = "まるもち";
 
 function getMascotName() {
@@ -354,7 +356,7 @@ function initUI() {
 
     if (els.btnResetBubble) {
         els.btnResetBubble.addEventListener('click', function () {
-            appState.bubbleConfig = { anchor: 'top', x: 50, y: 16, w: 520, pad: 16 };
+            appState.bubbleConfig = { anchor: 'top', x: 50, y: 28, w: 380, pad: 24 };
             renderBubblePanelValues();
             applyBubbleStyle();
             saveSettings();
@@ -541,6 +543,14 @@ function loadSettings() {
     var sBubble = localStorage.getItem(LS_BUBBLE_KEY);
     if (sBubble) {
         try { appState.bubbleConfig = JSON.parse(sBubble); } catch (e) { }
+    }
+
+    // Version-based migration: reset old values to new defaults
+    var ver = localStorage.getItem(LS_BUBBLE_VER);
+    if (ver !== BUBBLE_VER) {
+        appState.bubbleConfig = { anchor: 'top', x: 50, y: 28, w: 380, pad: 24 };
+        localStorage.setItem(LS_BUBBLE_VER, BUBBLE_VER);
+        localStorage.setItem(LS_BUBBLE_KEY, JSON.stringify(appState.bubbleConfig));
     }
 }
 
