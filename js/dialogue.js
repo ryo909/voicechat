@@ -1,5 +1,8 @@
 // ============================================
-// DialogueSystem v4.6 (Act + Pending + Scene + Branch + Retry + Memory)
+// DialogueSystem v5.0 (Bubble separated + Topic lock + SideTalk handling)
+// - chat text: natural text only
+// - bubble: ACK / nonverbal only (never injected into text)
+// - 1Q rule removed (ask is optional)
 // ============================================
 
 class DialogueSystem {
@@ -11,7 +14,7 @@ class DialogueSystem {
         this.activeTopic = null;   // PLAN/BODY/HOBBY/SOCIAL/CHOICE
         this.activeScene = null;   // sceneId
         this.sceneStepIndex = 0;
-        this.pending = null;       // expected answer info
+        this.pending = null;       // { topic, scene, slot, kind, askedTurn, retries, askedText }
         this.intent = "CHAT";      // CHAT/COMFORT/DECIDE
 
         // --- memory
@@ -25,6 +28,10 @@ class DialogueSystem {
         };
 
         this._ackHistory = []; // last 2 ACKs
+
+        // --- bubble packs (非言語はここだけ)
+        this.BUBBLE_ACK = ["うんうん", "なるほど", "そっか", "了解", "だいじょうぶ", "ふむふむ"];
+        this.BUBBLE_REACT = ["（うなずき）", "（しんぱい）", "（にこ）", "（ふむ）", "（ほっ）", "（じーっ）", "（メモ）"];
 
         // --- dictionaries / templates
         this.ACT_DICT = {
@@ -40,10 +47,11 @@ class DialogueSystem {
             TOPIC_SWITCH: ["話変える", "話を変える", "別の話", "別件", "ところで", "ちなみに", "切り替え", "話題変える"]
         };
 
+        // scene中に話題選択しそうな時のブリッジ
         this.BRIDGE_BACK = [
-            "それも気になるけど、いまの続きだけ先に聞かせてね",
-            "うんうん。あとでそっちも聞くね。まずは今のとこだけ",
-            "OK。いったん今の話をひとつだけ片づけよ"
+            "うんうん。そっちも気になるけど、いまの続きだけ先に聞かせてね",
+            "OK。あとでそっちも聞くね。まずは今の話をひとつだけ",
+            "いったん今のところだけ片づけよ"
         ];
 
         this.CLOSING = {
@@ -52,17 +60,15 @@ class DialogueSystem {
             PLAYFUL_END: ["いいね、その感じだよ", "それ、ちょっと楽しみにしとくね", "あとで成果聞かせてね"]
         };
 
-        this.QUIRKS = [
-            "よしよしだよ",
-            "それでいいよ",
-            "だいじょうぶだよ",
-            "いったん深呼吸しよ",
-            "ちょっとだけ一緒にやろ",
-            "うんうん、そうだね",
-            "それ、えらいよ",
-            "無理しないが正解だよ"
+        // 言い添え（頻度低め）
+        this.SOFT_TAGS = [
+            "ゆっくりでいいよ",
+            "大丈夫だよ",
+            "いったん小さくいこ",
+            "無理しないでね"
         ];
 
+        // Retry prompts by kind
         this.RETRY = {
             time: [
                 "だいたいでいいよ。いつ頃？",
@@ -110,7 +116,7 @@ class DialogueSystem {
             CHOICE: ["迷う", "決められない", "どっち", "二択", "選べない"]
         };
 
-        // --- scenes (15 + small extra)
+        // --- scenes
         this.TOPIC_SCENES = this.buildScenes();
     }
 
@@ -121,58 +127,70 @@ class DialogueSystem {
         this.turn++;
 
         const text = (userText || "").trim();
-        const mode = ctx.mode || "chat"; // (現UIのmodeは残しておく)
         const userName = (ctx.userName || "").trim();
         const mascotName = (ctx.mascotName || "").trim();
 
-        // initial greeting
+        // 初回
         if (!text) {
             if (this.currentState === "start") {
                 this.currentState = "conversation";
                 this.activeTopic = null;
                 this.activeScene = null;
                 this.pending = null;
-                const greet = "こんにちは！何かお話ししよ";
-                return { text: greet, mood: "happy" };
+                return this.decorate(this.formatReplyV5({
+                    lead: "こんにちは！",
+                    body: "何かお話ししよ",
+                    ask: null,
+                    mood: "happy",
+                    bubbleType: "ack"
+                }), userName, mascotName);
             }
-            return { text: "うん、聞いてるよ", mood: "neutral" };
+            return this.decorate(this.formatReplyV5({
+                lead: "うん",
+                body: "聞いてるよ",
+                ask: null,
+                mood: "neutral",
+                bubbleType: "ack"
+            }), userName, mascotName);
         }
 
         this.currentState = "conversation";
-
-        // update last user
         this.memory.lastUser = text;
 
-        // Act classify
         const act = this.classifyAct(text);
 
-        // global acts first
-        const global = this.handleGlobalActs(act, text, userName);
-        if (global) return global;
+        // グローバル
+        const global = this.handleGlobalActs(act);
+        if (global) return this.decorate(global, userName, mascotName);
 
-        // infer intent (topic-aware later)
-        this.intent = this.inferIntent(this.activeTopic, text);
-
-        // If pending exists: prioritize pending handling
-        if (this.pending) {
-            const out = this.handlePending(act, text);
-            if (out) return this.decorate(out, userName, mascotName);
-            // if not handled, fallthrough
-        }
-
-        // Topic switching explicit
+        // 明示 topic switch（scene中でも最優先で通す）
         if (act === "TOPIC_SWITCH") {
             this.resetTopic();
-            return this.decorate({ text: "OK、話変えよ。いま何の話にする？（予定/体調/趣味/人間関係/迷い）", mood: "neutral" }, userName, mascotName);
+            return this.decorate(this.formatReplyV5({
+                lead: "OK",
+                body: "話変えよ",
+                ask: "いま何の話にする？（予定/体調/趣味/人間関係/迷い）",
+                mood: "neutral",
+                bubbleType: "react"
+            }), userName, mascotName);
         }
 
-        // scene is active -> keep it unless explicit switch
+        // intent（参考）
+        this.intent = this.inferIntent(this.activeTopic, text);
+
+        // pending中（質問済みの回答待ち）
+        if (this.pending) {
+            const out = this.handlePending(act, text);
+            return this.decorate(out, userName, mascotName);
+        }
+
+        // scene中は保持（topic飛び防止）
         if (this.activeTopic && this.activeScene) {
             const out = this.advanceScene(text);
             return this.decorate(out, userName, mascotName);
         }
 
-        // No active scene: decide topic
+        // sceneなし：topic決定→scene開始
         const topic = this.pickTopic(text);
         if (topic) {
             this.startTopic(topic, text);
@@ -180,28 +198,42 @@ class DialogueSystem {
             return this.decorate(entry, userName, mascotName);
         }
 
-        // still unknown: show gentle topic menu (1 question)
-        const menu = "うんうん。いま何の話が近い？（予定/体調/趣味/人間関係/迷い）";
-        return this.decorate({ text: menu, mood: "neutral" }, userName, mascotName);
+        // どれでもない：メニュー（質問は1つにこだわらないが、ここは軽く）
+        return this.decorate(this.formatReplyV5({
+            lead: "うんうん",
+            body: null,
+            ask: "いま何の話が近い？（予定/体調/趣味/人間関係/迷い）",
+            mood: "neutral",
+            bubbleType: "ack"
+        }), userName, mascotName);
     }
 
     // -----------------------------
-    // Core: classify / global acts
+    // Bubble picker
+    // -----------------------------
+    pickBubble(type = "auto") {
+        if (type === "react") return this.pick(this.BUBBLE_REACT);
+        if (type === "ack") return this.pick(this.BUBBLE_ACK);
+        return (Math.random() < 0.25) ? this.pick(this.BUBBLE_REACT) : this.pick(this.BUBBLE_ACK);
+    }
+
+    // -----------------------------
+    // Acts
     // -----------------------------
     classifyAct(text) {
-        const t = text.trim();
+        const t = (text || "").trim();
 
-        // exact-ish matches for short phrases
-        if (this.matchesAny(t, this.ACT_DICT.GREET)) return "GREET";
-        if (this.matchesAny(t, this.ACT_DICT.THANKS)) return "THANKS";
-        if (this.matchesAny(t, this.ACT_DICT.APOLOGY)) return "APOLOGY";
-        if (this.matchesAny(t, this.ACT_DICT.BYE)) return "BYE";
+        if (this.matchesAnyExact(t, this.ACT_DICT.GREET)) return "GREET";
+        if (this.matchesAnyExact(t, this.ACT_DICT.THANKS)) return "THANKS";
+        if (this.matchesAnyExact(t, this.ACT_DICT.APOLOGY)) return "APOLOGY";
+        if (this.matchesAnyExact(t, this.ACT_DICT.BYE)) return "BYE";
 
-        if (this.matchesAny(t, this.ACT_DICT.TOPIC_SWITCH)) return "TOPIC_SWITCH";
+        // TOPIC_SWITCH は includes で強く拾う
+        if (this.matchesAnyInclude(t, this.ACT_DICT.TOPIC_SWITCH)) return "TOPIC_SWITCH";
 
-        if (this.matchesAny(t, this.ACT_DICT.CONFUSED) || /どういうこと|意味/.test(t)) return "CONFUSED";
-        if (this.matchesAny(t, this.ACT_DICT.DENY)) return "DENY";
-        if (this.matchesAny(t, this.ACT_DICT.AFFIRM)) return "AFFIRM";
+        if (this.matchesAnyExact(t, this.ACT_DICT.CONFUSED) || /どういうこと|意味/.test(t)) return "CONFUSED";
+        if (this.matchesAnyExact(t, this.ACT_DICT.DENY)) return "DENY";
+        if (this.matchesAnyExact(t, this.ACT_DICT.AFFIRM)) return "AFFIRM";
 
         // short noun/topic select
         if (t.length <= 6) {
@@ -212,111 +244,156 @@ class DialogueSystem {
         return "FREE";
     }
 
-    handleGlobalActs(act, text, userName) {
-        if (act === "GREET") return { text: "やほ。今日はどんな感じ？", mood: "happy" };
-        if (act === "THANKS") return { text: "うんうん。そう言ってもらえるの嬉しいよ", mood: "happy" };
-        if (act === "APOLOGY") return { text: "だいじょうぶだよ。気にしないでね", mood: "calm" };
-        if (act === "BYE") return { text: "うん、またね。いつでも呼んでね", mood: "calm" };
+    handleGlobalActs(act) {
+        if (act === "GREET") return this.formatReplyV5({ lead: "やほ", body: "今日はどんな感じ？", ask: null, mood: "happy", bubbleType: "ack" });
+        if (act === "THANKS") return this.formatReplyV5({ lead: "うんうん", body: "そう言ってもらえるの嬉しいよ", ask: null, mood: "happy", bubbleType: "react" });
+        if (act === "APOLOGY") return this.formatReplyV5({ lead: "だいじょうぶ", body: "気にしないでね", ask: null, mood: "calm", bubbleType: "react" });
+        if (act === "BYE") return this.formatReplyV5({ lead: "うん", body: "またね。いつでも呼んでね", ask: null, mood: "calm", bubbleType: "ack" });
 
-        // If user only affirms/denies without context and no pending, keep it light
-        if (!this.pending && (act === "AFFIRM" || act === "DENY") && !this.activeTopic) {
-            return { text: "うんうん。いま何の話が近い？（予定/体調/趣味/人間関係/迷い）", mood: "neutral" };
+        // AFFIRM/DENYだけで飛んできたとき
+        if (!this.activeTopic && !this.pending && (act === "AFFIRM" || act === "DENY")) {
+            return this.formatReplyV5({
+                lead: "うんうん",
+                body: null,
+                ask: "いま何の話が近い？（予定/体調/趣味/人間関係/迷い）",
+                mood: "neutral",
+                bubbleType: "ack"
+            });
         }
         return null;
     }
 
     // -----------------------------
-    // Pending (Expected Answer)
+    // SideTalk detector (補足/愚痴/状況説明を「回答」と誤認しにくくする)
+    // -----------------------------
+    isSideTalk(text, step) {
+        const t = (text || "").trim();
+        if (!t) return false;
+
+        // 長い＝補足になりがち
+        if (t.length >= 35) return true;
+
+        // つなぎ言葉
+        if (/(ちなみに|というか|てか|でも|だって|なんか|それで|いやさ|あと|あとさ)/.test(t)) return true;
+
+        // kind が time/place/item のとき、感情が濃いと横道扱い
+        if (step && (step.kind === "time" || step.kind === "place" || step.kind === "item")) {
+            if (/(疲れ|しんど|モヤ|イラ|不安|つら|最悪|泣)/.test(t)) return true;
+        }
+        return false;
+    }
+
+    // -----------------------------
+    // Pending (回答待ち)
     // -----------------------------
     handlePending(act, text) {
         const p = this.pending;
 
-        // CONFUSED: keep pending, rephrase question (retry)
+        // CONFUSED: 聞き方変える（pending維持）
         if (act === "CONFUSED") {
+            p.retries = Math.min(2, (p.retries || 0) + 1);
             const ask = this.retryAsk(p.kind, p.retries);
-            p.retries = Math.min(2, (p.retries || 0) + 1);
-            return this.formatReply({ ack: this.pickAck(), summary: this.pickConfusedPrefix(text), question: ask, mood: this.detectMood(text) });
+            return this.formatReplyV5({
+                lead: "ごめんね",
+                body: "言い方変えるね",
+                ask,
+                mood: this.detectMood(text),
+                bubbleType: "react"
+            });
         }
 
-        // DENY: keep pending but give choice/short format
+        // DENY: 形式を簡単に（pending維持）
         if (act === "DENY") {
-            const ask = this.retryAsk(p.kind, Math.max(1, p.retries || 1));
             p.retries = Math.min(2, (p.retries || 0) + 1);
-            return this.formatReply({ ack: this.pickAck("CALM"), summary: "OK、聞き方変えるね", question: ask, mood: "calm" });
+            const ask = this.retryAsk(p.kind, Math.max(1, p.retries));
+            return this.formatReplyV5({
+                lead: "OK",
+                body: "聞き方変えるね",
+                ask,
+                mood: "calm",
+                bubbleType: "react"
+            });
         }
 
-        // Try match answer to pending.kind
+        // 横道：scene進行させず、同じ質問をやさしく言い直す（pending維持）
+        const step = this.getCurrentStep();
+        if (this.isSideTalk(text, step)) {
+            const soften = [
+                "うんうん",
+                "そっか",
+                "なるほどね",
+                "それはそうなるよね"
+            ];
+            const ask = this.retryAsk(p.kind, p.retries || 0) || p.askedText || "もう一回だけ教えて";
+            return this.formatReplyV5({
+                lead: this.pick(soften),
+                body: null,
+                ask,
+                mood: this.detectMood(text),
+                bubbleType: "react"
+            });
+        }
+
+        // kind一致 → 保存して次へ
         if (this.matchAnswerKind(text, p.kind)) {
             this.saveSlot(p.topic, p.slot, text);
-            // apply branch if exists on that step
+
+            // branch
             const branched = this.applyBranchIfAny(text);
-            if (branched) return branched;
+            if (branched) { this.pending = null; return branched; }
 
-            // move to next step
             this.pending = null;
             this.sceneStepIndex++;
-            return this.askNextStepOrClose();
+
+            return this.askNextStepOrClose(text);
         }
 
-        // If mismatched: try smart-swap (time<->item etc)
-        const swapped = this.trySwapKindSave(text, p);
-        if (swapped) {
-            this.pending = null;
-            this.sceneStepIndex++;
-            return this.askNextStepOrClose();
-        }
-
-        // retry ask (no infinite)
+        // mismatch -> retry（回数制限）
         p.retries = (p.retries || 0) + 1;
         if (p.retries >= 3) {
-            // give up gracefully, move on
+            // あきらめて前に進める（詰めない）
             this.pending = null;
             this.sceneStepIndex++;
-            return this.formatReply({ ack: this.pickAck("CALM"), summary: "OK、そこは今は保留でいこ", question: this.peekNextAsk() || "このまま続ける？", mood: "calm" });
+            const next = this.getCurrentStep();
+            if (!next) return this.closeScene();
+
+            // 次の質問を出す（軽め）
+            const ask = this.pick(next.ask || ["もうちょい教えて"]);
+            this.pending = {
+                topic: this.activeTopic,
+                scene: this.activeScene,
+                slot: next.slot,
+                kind: next.kind || "free",
+                askedTurn: this.turn,
+                retries: 0,
+                askedText: ask
+            };
+
+            return this.formatReplyV5({
+                lead: "OK",
+                body: "そこは今は保留でいこ",
+                ask,
+                mood: "calm",
+                bubbleType: "ack"
+            });
         }
 
         const ask = this.retryAsk(p.kind, p.retries);
-        return this.formatReply({ ack: this.pickAck(), summary: "うんうん", question: ask, mood: this.detectMood(text) });
+        p.askedText = ask;
+
+        return this.formatReplyV5({
+            lead: "うんうん",
+            body: null,
+            ask,
+            mood: this.detectMood(text),
+            bubbleType: "ack"
+        });
     }
 
     retryAsk(kind, retries) {
         const arr = this.RETRY[kind] || this.RETRY.free;
         const idx = Math.min(arr.length - 1, retries || 0);
         return arr[idx];
-    }
-
-    pickConfusedPrefix(text) {
-        const sub = this.confusedSubtype(text);
-        const map = {
-            HEAR: "ごめんね、言い方変えるね",
-            MEANING: "むずかしく言っちゃった。ひとつだけ聞くね",
-            CHOICE: "じゃあ二択にするね",
-            PREMISE: "あ、そっちじゃなかったね。聞き方直すね"
-        };
-        return map[sub] || "ごめんね、言い方変えるね";
-    }
-
-    confusedSubtype(text) {
-        const t = (text || "").trim();
-        if (/どういうこと|意味|何言って/.test(t)) return "MEANING";
-        if (/どれ|どっち|何から/.test(t)) return "CHOICE";
-        if (/ちがう|違う/.test(t)) return "PREMISE";
-        return "HEAR";
-    }
-
-    trySwapKindSave(text, p) {
-        // Example: asked time but got item, etc.
-        const kinds = ["time", "item", "place", "feeling", "yesno", "choice"];
-        for (const k of kinds) {
-            if (k === p.kind) continue;
-            if (this.matchAnswerKind(text, k)) {
-                // save into a "best guess" slot in same topic (lightweight)
-                // If current pending slot is time but text looks like item, store in same slot anyway (keeps progress)
-                this.saveSlot(p.topic, p.slot, text);
-                return true;
-            }
-        }
-        return false;
     }
 
     // -----------------------------
@@ -331,7 +408,6 @@ class DialogueSystem {
 
     pickTopic(text) {
         const t = text || "";
-        // direct triggers
         for (const k of Object.keys(this.TOPIC_TRIGGERS)) {
             const arr = this.TOPIC_TRIGGERS[k];
             if (arr.some(w => t.includes(w))) return k;
@@ -351,31 +427,26 @@ class DialogueSystem {
 
     pickScene(topic, text) {
         const t = text || "";
-        // PLAN
         if (topic === "PLAN") {
             if (/(週末|土日)/.test(t)) return "plan-weekend";
             if (/(買い物|スーパー|コンビニ)/.test(t)) return "plan-shopping";
             return "plan-general";
         }
-        // BODY
         if (topic === "BODY") {
             if (/(目|しょぼ)/.test(t)) return "body-eyes";
             if (/(眠|ねむ)/.test(t)) return "body-sleepy";
             return "body-check";
         }
-        // HOBBY
         if (topic === "HOBBY") {
             if (/(推し)/.test(t)) return "hobby-oshi";
             if (/(映画|ゲーム|アニメ|漫画)/.test(t)) return "hobby-moviegame";
             return "hobby-general";
         }
-        // SOCIAL
         if (topic === "SOCIAL") {
             if (/(上司)/.test(t)) return "social-boss";
             if (/(家族|母|父)/.test(t)) return "social-family";
             return "social-moya";
         }
-        // CHOICE
         if (topic === "CHOICE") {
             if (/(仕事|案件|進捗)/.test(t)) return "choice-worklight";
             if (/(決められない)/.test(t) && t.length > 8) return "choice-small";
@@ -387,153 +458,172 @@ class DialogueSystem {
     getSceneEntry() {
         const scene = this.getScene();
         const line = scene && scene.entry ? this.pick(scene.entry) : "うんうん。で、どうしたの？";
-        // entry is a question already; keep format 1Q
-        return this.formatReply({ ack: this.pickAck(), summary: null, question: line, mood: "neutral", raw: true });
+
+        // entryは「質問」っぽいので ask に入れて pending は立てない（次の発言を step0 で処理）
+        return this.formatReplyV5({
+            lead: this.pickAck(),
+            body: null,
+            ask: line,
+            mood: "neutral",
+            bubbleType: "ack"
+        });
     }
 
     advanceScene(userText) {
-        // If user tries to topic-select during a scene, bridge back unless explicit switch
+        const step = this.getCurrentStep();
+        if (!step) return this.closeScene();
+
+        // scene中の topic select はブリッジして戻す（ただし明示switchは別で処理済み）
         const act = this.classifyAct(userText);
         if (act === "TOPIC_SELECT") {
-            const bridge = this.pick(this.BRIDGE_BACK);
-            const q = this.peekCurrentAsk() || "もう一回だけ、短く教えてね";
-            return this.formatReply({ ack: this.pickAck("CALM"), summary: bridge, question: q, mood: "calm" });
+            return this.formatReplyV5({
+                lead: this.pickAck("CALM"),
+                body: this.pick(this.BRIDGE_BACK),
+                ask: this.pick(step.ask || ["もう一回だけ、短く教えてね"]),
+                mood: "calm",
+                bubbleType: "react"
+            });
         }
 
-        // Consume user input as answer to current step
-        const step = this.getCurrentStep();
-        if (!step) {
-            // scene ended -> close
-            return this.closeScene();
+        // 横道は「受け止め」＋同じ質問をやさしく（進めない／pending立てない）
+        if (this.isSideTalk(userText, step)) {
+            const ask = this.retryAsk(step.kind || "free", 0) || this.pick(step.ask || ["もうちょい教えて"]);
+            return this.formatReplyV5({
+                lead: this.pick(["うんうん", "そっか", "なるほどね", "それはそうなるよね"]),
+                body: null,
+                ask,
+                mood: this.detectMood(userText),
+                bubbleType: "react"
+            });
         }
 
-        // Set pending based on current step and handle via pending logic
+        // ここからは「step0への回答」として扱う
+        // もし kind が合うなら保存→次へ
+        if (this.matchAnswerKind(userText, step.kind || "free")) {
+            this.saveSlot(this.activeTopic, step.slot, userText);
+
+            const branched = this.applyBranchIfAny(userText);
+            if (branched) return branched;
+
+            this.sceneStepIndex++;
+            return this.askNextStepOrClose(userText);
+        }
+
+        // 合わない場合：retry質問を出して pending を立てる（質問した時だけ pending）
+        const ask = this.retryAsk(step.kind || "free", 1);
         this.pending = {
             topic: this.activeTopic,
             scene: this.activeScene,
             slot: step.slot,
             kind: step.kind || "free",
             askedTurn: this.turn,
-            retries: 0
+            retries: 1,
+            askedText: ask
         };
 
-        // Try immediately match (so it feels responsive)
-        if (this.matchAnswerKind(userText, this.pending.kind)) {
-            this.saveSlot(this.pending.topic, this.pending.slot, userText);
-
-            // branch check
-            const branched = this.applyBranchIfAny(userText);
-            if (branched) { this.pending = null; return branched; }
-
-            this.pending = null;
-            this.sceneStepIndex++;
-            return this.askNextStepOrClose(userText);
-        }
-
-        // mismatch -> ask retry version
-        this.pending.retries = 1;
-        const ask = this.retryAsk(this.pending.kind, 1);
-        return this.formatReply({
-            ack: this.pickAck(),
-            summary: this.recallMaybe() || "うんうん",
-            question: ask,
-            mood: this.detectMood(userText)
+        return this.formatReplyV5({
+            lead: this.pickAck(),
+            body: null,
+            ask,
+            mood: this.detectMood(userText),
+            bubbleType: "ack"
         });
     }
 
     askNextStepOrClose(userText) {
-        // memory recall maybe
-        const recall = this.recallMaybe();
-
         const nextStep = this.getCurrentStep();
         if (!nextStep) return this.closeScene();
 
-        // set pending for next question (we ask now)
+        // たまに「質問なし」で返して詰問感を消す（ただし scene は進めない）
+        const noAskRate = 0.35; // 好みで調整
+        const shouldNoAsk = (Math.random() < noAskRate);
+
+        // 軽い言い添え（頻度低め）
+        const tagRate = 0.15;
+        const maybeTag = (Math.random() < tagRate) ? this.pick(this.SOFT_TAGS) : null;
+
+        if (shouldNoAsk) {
+            // pendingは立てない（質問してないので）
+            return this.formatReplyV5({
+                lead: this.pickAck(),
+                body: maybeTag || this.pick(["その感じでいこ", "ゆっくりで大丈夫だよ", "ここまでで十分だよ"]),
+                ask: null,
+                mood: this.detectMood(userText || ""),
+                bubbleType: (this.intent === "COMFORT") ? "react" : "ack"
+            });
+        }
+
+        // 質問する場合だけ pending を立てる
+        const ask = this.pick(nextStep.ask || ["もうちょい教えて"]);
         this.pending = {
             topic: this.activeTopic,
             scene: this.activeScene,
             slot: nextStep.slot,
             kind: nextStep.kind || "free",
             askedTurn: this.turn,
-            retries: 0
+            retries: 0,
+            askedText: ask
         };
 
-        const ask = this.pick(nextStep.ask || ["もうちょい教えて"]);
-        const ack = this.pickAck(this.pickTone(this.activeTopic, userText || ""));
-        const summary = recall; // may be null
-        return this.formatReply({ ack, summary, question: ask, mood: this.detectMood(userText || "") });
-    }
-
-    peekCurrentAsk() {
-        const step = this.getCurrentStep();
-        if (!step) return null;
-        return this.pick(step.ask || []);
-    }
-
-    peekNextAsk() {
-        const scene = this.getScene();
-        const idx = this.sceneStepIndex;
-        const step = scene && scene.steps ? scene.steps[idx] : null;
-        if (!step) return null;
-        return this.pick(step.ask || []);
+        return this.formatReplyV5({
+            lead: this.pickAck(this.pickTone(this.activeTopic, userText || "")),
+            body: maybeTag,
+            ask,
+            mood: this.detectMood(userText || ""),
+            bubbleType: (this.intent === "COMFORT") ? "react" : "ack"
+        });
     }
 
     closeScene() {
-        // pick closing type
         let closingType = "PLAYFUL_END";
         if (this.intent === "COMFORT" || this.activeTopic === "BODY" || this.activeTopic === "SOCIAL") closingType = "SOFT_END";
         if (this.intent === "DECIDE" || this.activeTopic === "PLAN" || this.activeTopic === "CHOICE") closingType = "NEXT_HOOK";
 
         const closeLine = this.pick(this.CLOSING[closingType] || this.CLOSING.PLAYFUL_END);
 
-        // reset scene but keep topic (optional). Here we allow continue or switch by 1Q.
+        // scene reset（topicは残してもいいが、ここは一旦scene切りで安定）
         this.activeScene = null;
         this.sceneStepIndex = 0;
         this.pending = null;
 
-        // one question only
-        const q = "この話、もうちょい続ける？それとも別の話にする？";
-        const ack = this.pickAck(this.pickTone(this.activeTopic, this.memory.lastUser || ""));
-        const out = this.formatReply({ ack, summary: closeLine, question: q, mood: "neutral" });
-
-        // after asking, allow next user response to pick topic or continue
-        // keep activeTopic for now (so user can continue)
-        return out;
+        // ここは質問ありでも無しでもOK。今回は軽い質問を添える（会話継続しやすい）
+        return this.formatReplyV5({
+            lead: this.pickAck(this.pickTone(this.activeTopic, this.memory.lastUser || "")),
+            body: closeLine,
+            ask: "この話もうちょい続ける？それとも別の話にする？",
+            mood: "neutral",
+            bubbleType: "ack"
+        });
     }
 
     // -----------------------------
-    // Branching
+    // Branching（v4.6踏襲）
     // -----------------------------
     applyBranchIfAny(answerText) {
-        const step = this.getPrevStep(); // branch attached to the step we just filled
+        const step = this.getPrevStep();
         if (!step || !step.branch || !Array.isArray(step.branch)) return null;
 
         for (const b of step.branch) {
             try {
                 if (b.test && b.test.test(answerText)) {
-                    // say one line (no question), then jump scene entry next turn
                     const say = b.say || "うんうん";
                     const goto = b.goto;
                     if (goto) {
-                        // switch topic/scene if needed
-                        // If goto contains "body-" etc, infer topic by prefix
                         const nextTopic = this.inferTopicFromScene(goto) || this.activeTopic;
                         this.activeTopic = nextTopic;
                         this.activeScene = goto;
                         this.sceneStepIndex = 0;
                         this.pending = null;
 
-                        // return "say + entry(question)" as one message but keep 1 question rule:
-                        // We make summary = say, question = entry line
-                        const entry = this.getSceneEntry();
-                        // entry is already formatted reply; unpack it is annoying, so we rebuild:
                         const scene = this.getScene();
                         const q = scene && scene.entry ? this.pick(scene.entry) : "うん、続き聞くね";
-                        return this.formatReply({
-                            ack: this.pickAck(this.pickTone(this.activeTopic, answerText)),
-                            summary: say,
-                            question: q,
-                            mood: "neutral"
+
+                        return this.formatReplyV5({
+                            lead: this.pickAck(this.pickTone(this.activeTopic, answerText)),
+                            body: say,
+                            ask: q,
+                            mood: "neutral",
+                            bubbleType: "react"
                         });
                     }
                 }
@@ -553,74 +643,46 @@ class DialogueSystem {
     }
 
     // -----------------------------
-    // Memory: save / recall
+    // Memory
     // -----------------------------
     saveSlot(topic, slot, value) {
         if (!topic || !slot) return;
         if (!this.memory.slots[topic]) this.memory.slots[topic] = {};
         this.memory.slots[topic][slot] = value;
 
-        // sticky (short-lived recall)
+        // stickyは「引用くどさ」になりやすいので軽めに（短い時だけ）
         const v = (value || "").trim();
-        if (v && v.length <= 12) {
-            this.memory.sticky.push({ key: slot, value: v, topic, ttl: 6, used: false });
+        if (v && v.length <= 10) {
+            this.memory.sticky.push({ key: slot, value: v, topic, ttl: 5, used: false });
             if (this.memory.sticky.length > 3) this.memory.sticky.shift();
         }
 
-        // decay TTL
+        // decay
         this.memory.sticky.forEach(s => s.ttl--);
         this.memory.sticky = this.memory.sticky.filter(s => s.ttl > 0);
     }
 
-    recallMaybe() {
-        // 25% recall, only if has unused sticky in same topic and same scene running
-        if (!this.activeTopic) return null;
-        if (Math.random() > 0.25) return null;
-
-        const cand = this.memory.sticky.find(s => s.topic === this.activeTopic && !s.used && s.value);
-        if (!cand) return null;
-
-        cand.used = true;
-        const templates = [
-            "さっきの〇〇のやつね",
-            "〇〇って言ってたやつ、続き聞いていい？",
-            "〇〇なら、こっちはどうする？"
-        ];
-        const t = this.pick(templates).replace(/〇〇/g, cand.value);
-        return t;
-    }
-
     // -----------------------------
-    // Reply formatting
+    // Reply formatting (text + bubble)
     // -----------------------------
-    formatReply({ ack, summary, question, mood, raw }) {
-        // raw=true means question already contains entry sentence (don't prepend ack sometimes)
-        let parts = [];
+    formatReplyV5({ lead, body, ask, mood, bubbleType }) {
+        const parts = [];
+        if (lead) parts.push(lead);
+        if (body) parts.push(body);
+        if (ask) parts.push(ask);
 
-        if (ack) parts.push(ack);
+        let text = parts.filter(Boolean).join("。");
+        text = text.replace(/。。+/g, "。").replace(/。\./g, "。");
 
-        if (summary) parts.push(summary);
-
-        if (question) parts.push(question);
-
-        let out = parts.filter(Boolean).join("。");
-
-        // quirks (low chance; comfort a bit higher)
-        const qRate = (this.intent === "COMFORT") ? 0.35 : 0.25;
-        if (Math.random() < qRate) {
-            const q = this.pick(this.QUIRKS);
-            // put as suffix lightly
-            if (!out.includes(q)) out = out + "。" + q;
-        }
-
-        // enforce no double punctuation
-        out = out.replace(/。。+/g, "。").replace(/。\./g, "。");
-
-        return { text: out, mood: mood || "neutral" };
+        return {
+            text,
+            bubble: this.pickBubble(bubbleType || "auto"),
+            mood: mood || "neutral"
+        };
     }
 
     decorate(reply, userName, mascotName) {
-        // optionally add user name rarely (as you had)
+        // userName をたまに先頭につける（任意）
         if (userName && Math.random() < 0.10 && !reply.text.includes(userName)) {
             reply.text = userName + "、" + reply.text;
         }
@@ -678,10 +740,9 @@ class DialogueSystem {
     }
 
     // -----------------------------
-    // Scenes data
+    // Scenes data（v4.6 そのまま）
     // -----------------------------
     buildScenes() {
-        // PLAN
         const SCENES_PLAN = {
             "plan-general": {
                 entry: ["予定の話だね。今日なにする予定？"],
@@ -722,7 +783,6 @@ class DialogueSystem {
             }
         };
 
-        // BODY
         const SCENES_BODY = {
             "body-check": {
                 entry: ["体調の話だね。いまどこがつらい？"],
@@ -770,7 +830,6 @@ class DialogueSystem {
             }
         };
 
-        // HOBBY
         const SCENES_HOBBY = {
             "hobby-general": {
                 entry: ["趣味の話しよ。最近ハマってるの、なに？"],
@@ -798,7 +857,6 @@ class DialogueSystem {
             }
         };
 
-        // SOCIAL
         const SCENES_SOCIAL = {
             "social-moya": {
                 entry: ["人間関係の話だね。だれ周りの話？"],
@@ -826,7 +884,6 @@ class DialogueSystem {
             }
         };
 
-        // CHOICE
         const SCENES_CHOICE = {
             "choice-2way": {
                 entry: ["迷いの話だね。いま迷ってるの、どんな二択？"],
@@ -897,8 +954,12 @@ class DialogueSystem {
     // -----------------------------
     // Utils
     // -----------------------------
-    matchesAny(text, arr) {
+    matchesAnyExact(text, arr) {
         return arr && arr.some(w => text === w);
+    }
+
+    matchesAnyInclude(text, arr) {
+        return arr && arr.some(w => text.includes(w));
     }
 
     pick(arr) {

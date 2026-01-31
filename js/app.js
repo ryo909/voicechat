@@ -487,20 +487,19 @@ function setStatus(msg) {
 
 function addBotMessage(reply) {
     addLog(reply.text, 'bot');
-    // No longer show text in bubble - bubble shows aizuchi only
 
-    // Speak
+    // 吹き出しは「相づち/非言語」専用（本文は入れない）
+    if (els.bubble) {
+        els.bubble.innerText = reply.bubble ? reply.bubble : "";
+    }
+
+    // Speak は本文のみ
     els.mascotFrame.classList.add('speaking');
     els.status.innerText = "発話中...";
 
     tts.speak(reply.text, reply.mood,
-        function () { // start
-            showBubbleLine('speakStart');
-        },
-        function () { // end
-            showBubbleLine('speakEnd');
-            setTimeout(function () { hideBubble(); }, 650);
-
+        function () { /* start */ },
+        function () { /* end */
             els.mascotFrame.classList.remove('speaking');
             els.status.innerText = "待機中";
         }
@@ -511,9 +510,11 @@ function setThinking(bool) {
     if (bool) {
         els.mascotFrame.classList.add('thinking');
         els.status.innerText = "考え中...";
-        showBubbleLine('thinking');
+        if (els.bubble) els.bubble.innerText = "（考え中）";
     } else {
         els.mascotFrame.classList.remove('thinking');
+        // 解除時は吹き出しを空にする（好みで維持でもOK）
+        if (els.bubble) els.bubble.innerText = "";
     }
 }
 
