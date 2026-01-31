@@ -28,6 +28,28 @@ var appState = {
 };
 
 // ============================================
+// Mascot Name Storage
+// ============================================
+const LS_NAME_KEY = "mascot_name_v1";
+const DEFAULT_NAME = "まるもち";
+
+function getMascotName() {
+    return localStorage.getItem(LS_NAME_KEY) || DEFAULT_NAME;
+}
+function setMascotName(name) {
+    const cleaned = (name || "").trim().slice(0, 24);
+    localStorage.setItem(LS_NAME_KEY, cleaned || DEFAULT_NAME);
+    renderMascotName();
+}
+function renderMascotName() {
+    const name = getMascotName();
+    const mascotNameLabel = document.getElementById("mascotNameLabel");
+    const mascotNameInput = document.getElementById("mascotNameInput");
+    if (mascotNameLabel) mascotNameLabel.textContent = name;
+    if (mascotNameInput) mascotNameInput.value = name;
+}
+
+// ============================================
 // DOM Elements (populated in initApp)
 // ============================================
 var els = {};
@@ -78,6 +100,9 @@ async function initApp() {
         btnSelectImage: must('btnSelectImage'),
         btnResetImage: must('btnResetImage'),
         userNameInput: must('userNameInput'),
+        mascotNameInput: $('mascotNameInput'),
+        mascotNameSave: $('mascotNameSave'),
+        mascotNameLabel: $('mascotNameLabel'),
         btnSaveName: must('btnSaveName')
     };
 
@@ -85,11 +110,14 @@ async function initApp() {
     await restoreImage();
     initUI();
 
+    // Initialize mascot name display
+    renderMascotName();
+
     console.log("[initApp] Complete.");
 
     // Initial Greeting
     setTimeout(function () {
-        var reply = dsm.step("", { mode: appState.mode, userName: appState.userName });
+        var reply = dsm.step("", { mode: appState.mode, userName: appState.userName, mascotName: getMascotName() });
         addBotMessage(reply);
     }, 1000);
 }
@@ -200,12 +228,22 @@ function initUI() {
     els.imageInput.addEventListener('change', handleImageUpload);
     els.btnResetImage.addEventListener('click', resetImage);
 
-    // Profile
+    // Profile - User Name
     els.btnSaveName.addEventListener('click', function () {
         appState.userName = els.userNameInput.value;
         saveSettings();
-        alert('保存しました');
+        setStatus("呼び名を保存しました");
+        setTimeout(function () { setStatus("待機中"); }, 700);
     });
+
+    // Profile - Mascot Name
+    if (els.mascotNameSave) {
+        els.mascotNameSave.addEventListener("click", function () {
+            setMascotName(els.mascotNameInput.value);
+            setStatus("キャラ名を保存しました");
+            setTimeout(function () { setStatus("待機中"); }, 700);
+        });
+    }
 
     // Initial Renders
     applyMouthStyle();
@@ -239,7 +277,7 @@ function handleSend() {
     increaseAffinity();
 
     // Bot Response
-    var reply = dsm.step(text, { mode: appState.mode, userName: appState.userName });
+    var reply = dsm.step(text, { mode: appState.mode, userName: appState.userName, mascotName: getMascotName() });
 
     // Thinking Delay
     setThinking(true);
@@ -254,9 +292,20 @@ function handleSend() {
 function addLog(text, type) {
     var div = document.createElement('div');
     div.className = 'msg-row ' + type;
-    div.innerHTML = '<div class="msg-bubble">' + escapeHtml(text) + '</div>';
+
+    // Add mascot name label for bot messages
+    if (type === 'bot') {
+        div.innerHTML = '<div class="msg-bubble"><div class="msgLabel">' + escapeHtml(getMascotName()) + '</div>' + escapeHtml(text) + '</div>';
+    } else {
+        div.innerHTML = '<div class="msg-bubble">' + escapeHtml(text) + '</div>';
+    }
+
     els.chatLog.appendChild(div);
     els.chatLog.scrollTop = els.chatLog.scrollHeight;
+}
+
+function setStatus(msg) {
+    if (els.status) els.status.innerText = msg;
 }
 
 function addBotMessage(reply) {

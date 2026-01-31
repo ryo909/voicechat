@@ -507,3 +507,53 @@ button {
         min-height: 300px;
     }
 }
+
+/* --- Mascot Header (Character Name) --- */
+.mascotHeader {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 10px;
+}
+
+.mascotName {
+    font-weight: 800;
+    letter-spacing: .02em;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    background: rgba(0, 0, 0, .18);
+    font-size: 14px;
+}
+
+/* --- Profile Row (Dev Panel) --- */
+.profileRow {
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.profileRow label {
+    color: rgba(255, 255, 255, .75);
+    font-size: 12px;
+}
+
+.profileRow input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, .10);
+    background: rgba(0, 0, 0, .22);
+    color: rgba(255, 255, 255, .92);
+    outline: none;
+}
+
+/* --- Bot Message Label --- */
+.msgLabel {
+    font-size: 11px;
+    color: rgba(255, 255, 255, .6);
+    margin-bottom: 4px;
+}
