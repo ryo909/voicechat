@@ -582,6 +582,17 @@ button.mini:hover {
     pointer-events: none;
     max-width: 420px;
     line-height: 1.45;
+    /* Fade animation */
+    transition: opacity 0.2s ease;
+    opacity: 0;
+}
+
+#bubble.bubble-show {
+    opacity: 1;
+}
+
+#bubble.bubble-hide {
+    opacity: 0;
 }
 
 #bubble::after {

@@ -59,12 +59,68 @@ function renderMascotName() {
 }
 
 // ============================================
-// Bubble Update Helper
+// Bubble Update Helper (DEPRECATED - now using aizuchi)
 // ============================================
 function setBubble(text) {
-    const el = document.getElementById("bubbleText") || document.getElementById("bubble");
-    if (!el) return;
-    el.textContent = text || "";
+    // No longer used for content - bubble shows aizuchi only
+}
+
+// ============================================
+// Bubble: Aizuchi & Nonverbal (NO content duplication)
+// ============================================
+const BUBBLE_LINES = {
+    user: [
+        "うんうん", "なるほど", "そっか", "わかったよ", "了解だよ",
+        "うむ", "ふむふむ", "ほほう", "おっけー",
+        "（こくこく）", "（うなずき）", "（メモメモ）",
+        "…", "（じーっ）", "（ふんふん）", "（にこ）"
+    ],
+    thinking: [
+        "ん〜…", "えっとね…", "ちょっと待ってね", "考え中…",
+        "（思考中）", "（うーん）", "…", "（じーっ）"
+    ],
+    speakStart: [
+        "よし", "うん", "ふむ", "（にこ）", "（えへ）", "（ぴこん）", "…"
+    ],
+    speakEnd: [
+        "（にこ）", "（ほっ）", "（こく）", "（ぱちぱち）", "（えらい）", "（よしよし）", "…"
+    ]
+};
+
+function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+let bubbleTimer = null;
+
+function showBubbleLine(phase) {
+    if (!els.bubble) return;
+
+    const list = (BUBBLE_LINES && BUBBLE_LINES[phase]) ? BUBBLE_LINES[phase] : null;
+    if (!list || !list.length) return;
+
+    const line = pick(list);
+
+    // Set text and show
+    els.bubble.innerText = line;
+    els.bubble.classList.remove('bubble-hide');
+    els.bubble.classList.add('bubble-show');
+
+    // Auto hide
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubbleTimer = setTimeout(function () {
+        hideBubble();
+    }, phase === 'thinking' ? 1200 : 900);
+}
+
+function hideBubble() {
+    if (!els.bubble) return;
+    els.bubble.classList.remove('bubble-show');
+    els.bubble.classList.add('bubble-hide');
+
+    setTimeout(function () {
+        if (els.bubble) els.bubble.innerText = "";
+    }, 220);
 }
 
 // ============================================
@@ -385,6 +441,7 @@ function handleSend() {
     // UI Updates
     els.input.value = '';
     addLog(text, 'user');
+    showBubbleLine('user');
 
     // Effects
     els.mascotFrame.classList.add('react');
@@ -430,15 +487,20 @@ function setStatus(msg) {
 
 function addBotMessage(reply) {
     addLog(reply.text, 'bot');
-    setBubble(reply.text);
+    // No longer show text in bubble - bubble shows aizuchi only
 
     // Speak
     els.mascotFrame.classList.add('speaking');
     els.status.innerText = "発話中...";
 
     tts.speak(reply.text, reply.mood,
-        function () { /* start */ },
-        function () { /* end */
+        function () { // start
+            showBubbleLine('speakStart');
+        },
+        function () { // end
+            showBubbleLine('speakEnd');
+            setTimeout(function () { hideBubble(); }, 650);
+
             els.mascotFrame.classList.remove('speaking');
             els.status.innerText = "待機中";
         }
@@ -449,7 +511,7 @@ function setThinking(bool) {
     if (bool) {
         els.mascotFrame.classList.add('thinking');
         els.status.innerText = "考え中...";
-        setBubble("...");
+        showBubbleLine('thinking');
     } else {
         els.mascotFrame.classList.remove('thinking');
     }
