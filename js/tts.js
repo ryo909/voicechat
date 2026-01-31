@@ -5,7 +5,7 @@ class TTS {
         this.voices = [];
         this.audioCtx = null;
         this.sfxEnabled = false;
-        
+
         // Profile for speech
         this.voiceURI = null;
         this.lang = 'ja-JP';
@@ -102,7 +102,7 @@ class TTS {
         if (!this.enabled) {
             // Even if disabled, fire events to simulate timing?
             // For now, just fire end immediately or skip
-             if (onEnd) onEnd();
+            if (onEnd) onEnd();
             return;
         }
 
@@ -126,14 +126,21 @@ class TTS {
         // Select voice
         if (this.voiceURI) {
             const v = this.voices.find(v => v.voiceURI === this.voiceURI);
-            if (v) u.voice = v;
+            if (v) {
+                u.voice = v;
+                u.lang = v.lang; // Use voice's lang to prevent override
+            } else {
+                u.lang = this.lang;
+            }
+        } else {
+            u.lang = this.lang;
         }
 
-        u.onstart = () => { if(onStart) onStart(); };
-        u.onend = () => { if(onEnd) onEnd(); };
-        u.onerror = (e) => { 
-            console.warn("TTS Error", e); 
-            if(onEnd) onEnd(); 
+        u.onstart = () => { if (onStart) onStart(); };
+        u.onend = () => { if (onEnd) onEnd(); };
+        u.onerror = (e) => {
+            console.warn("TTS Error", e);
+            if (onEnd) onEnd();
         };
 
         this.synth.speak(u);

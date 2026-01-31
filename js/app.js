@@ -23,7 +23,6 @@ var appState = {
     mascotName: 'Mascot',
     userName: '',
     affinity: 0,
-    mouthConfig: { x: 50, y: 70, w: 60, h: 20 },
     devVisible: false
 };
 
@@ -50,6 +49,15 @@ function renderMascotName() {
 }
 
 // ============================================
+// Bubble Update Helper
+// ============================================
+function setBubble(text) {
+    const el = document.getElementById("bubbleText") || document.getElementById("bubble");
+    if (!el) return;
+    el.textContent = text || "";
+}
+
+// ============================================
 // DOM Elements (populated in initApp)
 // ============================================
 var els = {};
@@ -64,11 +72,10 @@ async function initApp() {
     tts = new TTS();
     dsm = new DialogueSystem();
 
-    // Get DOM elements
+    // Get DOM elements (mouth-related removed)
     els = {
         mascotFrame: must('mascotFrame'),
         mascotImg: must('mascotImg'),
-        mouth: must('mouthOverlay'),
         bubble: must('bubble'),
         status: must('statusDisplay'),
         chatLog: must('chatLog'),
@@ -83,18 +90,6 @@ async function initApp() {
         devPanel: must('devPanel'),
         btnToggleDev: must('btnToggleDev'),
 
-        // Dev Controls
-        rangeX: must('rangeX'),
-        rangeY: must('rangeY'),
-        rangeW: must('rangeW'),
-        rangeH: must('rangeH'),
-        valX: must('valX'),
-        valY: must('valY'),
-        valW: must('valW'),
-        valH: must('valH'),
-        btnSaveMouth: must('btnSaveMouth'),
-        btnResetMouth: must('btnResetMouth'),
-
         // Image / Profile
         imageInput: must('imageInput'),
         btnSelectImage: must('btnSelectImage'),
@@ -105,6 +100,9 @@ async function initApp() {
         mascotNameLabel: $('mascotNameLabel'),
         btnSaveName: must('btnSaveName')
     };
+
+    // Cleanup old mouth tuning data
+    localStorage.removeItem("mascot_mouth_tuning_v1");
 
     loadSettings();
     await restoreImage();
@@ -161,18 +159,26 @@ function initUI() {
 
     els.btnMode.addEventListener('click', toggleMode);
 
-    // Voice List
+    // Voice List - Fixed to apply voice to TTS
     window.addEventListener('voices-updated', function (e) {
         els.voiceSelect.innerHTML = '';
         e.detail.forEach(function (v) {
             var opt = document.createElement('option');
             opt.value = v.voiceURI;
-            opt.textContent = v.name + " (" + v.lang + ")";
+            opt.textContent = v.name + " (" + v.lang + ")" + (v.default ? " *" : "");
             els.voiceSelect.appendChild(opt);
         });
-        // Restore selection if exists
+
         var saved = localStorage.getItem('mascot_voice_uri');
-        if (saved) els.voiceSelect.value = saved;
+
+        if (saved) {
+            els.voiceSelect.value = saved;
+            tts.setProfile({ voiceURI: saved }); // Apply to TTS
+        } else {
+            if (els.voiceSelect.value) {
+                tts.setProfile({ voiceURI: els.voiceSelect.value }); // Set initial voice
+            }
+        }
     });
 
     els.voiceSelect.addEventListener('change', function (e) {
@@ -194,31 +200,6 @@ function initUI() {
         appState.devVisible = !appState.devVisible;
         els.devPanel.classList.toggle('hidden', !appState.devVisible);
         saveSettings();
-    });
-
-    // Mouth Tuning
-    function updateMouth() {
-        appState.mouthConfig = {
-            x: els.rangeX.value,
-            y: els.rangeY.value,
-            w: els.rangeW.value,
-            h: els.rangeH.value
-        };
-        els.valX.innerText = appState.mouthConfig.x;
-        els.valY.innerText = appState.mouthConfig.y;
-        els.valW.innerText = appState.mouthConfig.w;
-        els.valH.innerText = appState.mouthConfig.h;
-        applyMouthStyle();
-    }
-    [els.rangeX, els.rangeY, els.rangeW, els.rangeH].forEach(function (r) {
-        if (r) r.addEventListener('input', updateMouth);
-    });
-
-    els.btnSaveMouth.addEventListener('click', saveSettings);
-    els.btnResetMouth.addEventListener('click', function () {
-        appState.mouthConfig = { x: 50, y: 70, w: 60, h: 20 };
-        renderDevPanelValues();
-        applyMouthStyle();
     });
 
     // Image Replace
@@ -246,8 +227,6 @@ function initUI() {
     }
 
     // Initial Renders
-    applyMouthStyle();
-    renderDevPanelValues();
     updateAffinityUI();
     updateModeUI();
 }
@@ -310,7 +289,7 @@ function setStatus(msg) {
 
 function addBotMessage(reply) {
     addLog(reply.text, 'bot');
-    els.bubble.innerText = reply.text;
+    setBubble(reply.text);
 
     // Speak
     els.mascotFrame.classList.add('speaking');
@@ -329,7 +308,7 @@ function setThinking(bool) {
     if (bool) {
         els.mascotFrame.classList.add('thinking');
         els.status.innerText = "考え中...";
-        els.bubble.innerText = "...";
+        setBubble("...");
     } else {
         els.mascotFrame.classList.remove('thinking');
     }
@@ -385,7 +364,7 @@ function createSparkle() {
 }
 
 // ============================================
-// Settings & Storage
+// Settings & Storage (mouth config removed)
 // ============================================
 function loadSettings() {
     var sName = localStorage.getItem('mascot_user_name_v1');
@@ -394,11 +373,6 @@ function loadSettings() {
 
     var sAff = localStorage.getItem('mascot_affinity_v1');
     if (sAff) appState.affinity = parseInt(sAff);
-
-    var sMouth = localStorage.getItem('mascot_mouth_tuning_v1');
-    if (sMouth) {
-        try { appState.mouthConfig = JSON.parse(sMouth); } catch (e) { }
-    }
 
     var sMode = localStorage.getItem('mascot_mode_v1');
     if (sMode) appState.mode = sMode;
@@ -417,38 +391,20 @@ function loadSettings() {
             els.btnSfx.classList.add('active');
         }
     }
+
+    // Restore voice to TTS
+    var savedVoice = localStorage.getItem('mascot_voice_uri');
+    if (savedVoice && tts) {
+        tts.setProfile({ voiceURI: savedVoice });
+    }
 }
 
 function saveSettings() {
     localStorage.setItem('mascot_user_name_v1', appState.userName);
     localStorage.setItem('mascot_affinity_v1', appState.affinity);
-    localStorage.setItem('mascot_mouth_tuning_v1', JSON.stringify(appState.mouthConfig));
     localStorage.setItem('mascot_mode_v1', appState.mode);
     localStorage.setItem('mascot_dev_visible_v1', appState.devVisible);
     if (tts) localStorage.setItem('mascot_sfx_enabled_v1', tts.sfxEnabled);
-}
-
-function applyMouthStyle() {
-    var cfg = appState.mouthConfig;
-    if (els.mouth) {
-        els.mouth.style.left = cfg.x + '%';
-        els.mouth.style.top = cfg.y + '%';
-        els.mouth.style.width = cfg.w + 'px';
-        els.mouth.style.height = cfg.h + 'px';
-    }
-}
-
-function renderDevPanelValues() {
-    var cfg = appState.mouthConfig;
-    if (els.rangeX) els.rangeX.value = cfg.x;
-    if (els.rangeY) els.rangeY.value = cfg.y;
-    if (els.rangeW) els.rangeW.value = cfg.w;
-    if (els.rangeH) els.rangeH.value = cfg.h;
-
-    if (els.valX) els.valX.innerText = cfg.x;
-    if (els.valY) els.valY.innerText = cfg.y;
-    if (els.valW) els.valW.innerText = cfg.w;
-    if (els.valH) els.valH.innerText = cfg.h;
 }
 
 // ============================================

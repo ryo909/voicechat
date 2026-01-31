@@ -166,7 +166,6 @@ button {
     position: relative;
     width: 300px;
     height: 350px;
-    /* Base size */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -216,80 +215,78 @@ button {
     }
 }
 
-/* Mouth Overlay */
-.mouth {
-    position: absolute;
-    /* Default pos, updated by JS */
-    left: 50%;
-    top: 70%;
-    width: 60px;
-    height: 20px;
-    transform: translate(-50%, -50%);
-    background: #000;
-    /* Placeholder color if simplistic */
-    /* Usually this would be an image or SVG. For now using a dark ellipse to simulate open mouth */
-    background: rgba(60, 20, 20, 0.85);
-    border-radius: 50%;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.mascot-frame.speaking .mouth {
-    opacity: 1;
-    animation: talk 0.18s infinite alternate ease-in-out;
-}
-
-@keyframes talk {
-    0% {
-        transform: translate(-50%, -50%) scaleY(0.2);
-    }
-
-    100% {
-        transform: translate(-50%, -50%) scaleY(1.0);
-    }
-}
-
-/* Bubble */
+/* --- Bubble (New Design) --- */
 .bubble {
     position: absolute;
-    top: -60px;
-    right: -20px;
-    background: rgba(255, 255, 255, 0.9);
-    color: #333;
-    padding: 10px 16px;
-    border-radius: 12px;
-    min-width: 100px;
-    max-width: 220px;
-    font-size: 0.9rem;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    left: 50%;
+    top: 10px;
+    width: min(92%, 420px);
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .09);
+    border: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
     opacity: 0;
-    transform: translateY(10px) scale(0.95);
-    transition: opacity 0.3s, transform 0.3s;
+    transform: translateX(-50%) translateY(-6px);
+    transition: opacity 160ms ease, transform 160ms ease;
     pointer-events: none;
     z-index: 5;
-    white-space: pre-wrap;
-    /* Max 3 lines logic handled by line-clamp if supported or just max-height */
+}
+
+.mascot-frame.speaking .bubble,
+.mascot-frame.thinking .bubble {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.bubble::after {
+    content: "";
+    position: absolute;
+    left: 30px;
+    top: 100%;
+    width: 0;
+    height: 0;
+    border: 10px solid transparent;
+    border-top-color: rgba(255, 255, 255, .10);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .25));
+}
+
+.bubbleInner {
+    display: block;
+}
+
+.bubbleText {
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, .92);
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-/* Show bubble when speaking OR thinking */
-.mascot-frame.speaking .bubble,
-.mascot-frame.thinking .bubble {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+/* Bubble Float Animation (Speaking only) */
+@keyframes bubbleFloatInner {
+    0% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
+
+    100% {
+        transform: translateY(0);
+    }
 }
 
-.bubble::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 20px;
-    border-width: 8px 8px 0;
-    border-style: solid;
-    border-color: rgba(255, 255, 255, 0.9) transparent transparent transparent;
+.mascot-frame.speaking .bubbleInner {
+    animation: bubbleFloatInner 900ms ease-in-out infinite;
+}
+
+.mascot-frame.thinking .bubbleInner {
+    animation: none;
 }
 
 /* Sparkle */
